@@ -25,7 +25,7 @@ def create_component(config, name, lib, pp):
                  extra_context=cookiecutter_args)
 
     repo = git.create_repository(component_dir)
-    git.add_remote(repo, 'origin', f"{config.global_git_base}/commodore-components/{name}.git")
+    git.add_remote(repo, 'origin', f"{config.default_component_base}/{name}.git")
     index = repo.index
     index.add('*')
     git.commit(repo, 'Initial commit')

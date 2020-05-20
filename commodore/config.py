@@ -36,6 +36,14 @@ class Config:
     def trace(self):
         return self._verbose >= 3
 
+    @property
+    def config_file(self):
+        return 'inventory/classes/global/commodore.yml'
+
+    @property
+    def default_component_base(self):
+        return f"{self.global_git_base}/commodore-components"
+
     def update_verbosity(self, verbose):
         self._verbose += verbose
 

@@ -1,3 +1,5 @@
+import collections
+
 import os
 from pathlib import Path as P
 
@@ -5,6 +7,9 @@ import click
 
 from . import git
 from .helpers import yaml_load
+
+
+Component = collections.namedtuple('Component', 'name repository_url target_directory')
 
 
 def _relsymlink(srcdir, srcname, destdir, destname=None):
@@ -63,14 +68,6 @@ def _discover_components(cfg, inventory_path):
     return sorted(components)
 
 
-def _fetch_component(cfg, component):
-    repository_url = f"{cfg.global_git_base}/commodore-components/{component}.git"
-    target_directory = P('dependencies') / component
-    repo = git.clone_repository(repository_url, target_directory)
-    cfg.register_component(component, repo)
-    create_component_symlinks(component)
-
-
 def fetch_components(cfg):
     """
     Download all components required by target. Generate list of components
@@ -80,7 +77,8 @@ def fetch_components(cfg):
     """
 
     click.secho('Discovering components...', bold=True)
-    components = _discover_components(cfg, 'inventory')
+    component_names = _discover_components(cfg, 'inventory')
+    components = _read_component_urls(cfg, component_names)
     click.secho('Fetching components...', bold=True)
     os.makedirs('inventory/classes/components', exist_ok=True)
     os.makedirs('inventory/classes/defaults', exist_ok=True)
@@ -88,6 +86,40 @@ def fetch_components(cfg):
     for c in components:
         if cfg.debug:
             click.echo(f" > Fetching component {c.name}...")
+        repo = git.clone_repository(c.repository_url, c.target_directory)
+        cfg.register_component(c.name, repo)
+        create_component_symlinks(cfg, c.name)
+
+
+def _read_component_urls(cfg, component_names):
+    components = []
+    component_urls = {}
+    if cfg.debug:
+        click.echo(f"   > Read commodore config file {cfg.config_file}")
+    try:
+        commodore_config = yaml_load(cfg.config_file)
+    except Exception as e:
+        raise click.ClickException(f"Could not read Commodore configuration: {e}") from e
+    if commodore_config is None:
+        click.secho('Empty Commodore config file', fg='yellow')
+    else:
+        for component_override in commodore_config.get('components', []):
+            if cfg.debug:
+                click.echo(f"   > Found override for component {component_override['name']}:")
+                click.echo(f"     Using URL {component_override['url']}")
+            component_urls[component_override['name']] = component_override['url']
+    for component_name in component_names:
+        repository_url = \
+            component_urls.get(
+                component_name,
+                f"{cfg.default_component_base}/{component_name}.git")
+        target_directory = P('dependencies') / component_name
+        component = Component(
+            name=component_name,
+            repository_url=repository_url,
+            target_directory=target_directory)
+        components.append(component)
+    return components
 
 
 def _set_component_version(cfg, component, version):
